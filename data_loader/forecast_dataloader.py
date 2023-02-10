@@ -8,6 +8,8 @@ def normalized(data, normalize_method, norm_statistic=None):
     if normalize_method == 'min_max':
         if not norm_statistic:
             norm_statistic = dict(max=np.max(data, axis=0), min=np.min(data, axis=0))
+        norm_statistic['max'] = np.array(norm_statistic['max'])
+        norm_statistic['min'] = np.array(norm_statistic['min'])
         scale = norm_statistic['max'] - norm_statistic['min'] + 1e-5
         data = (data - norm_statistic['min']) / scale
         data = np.clip(data, 0.0, 1.0)

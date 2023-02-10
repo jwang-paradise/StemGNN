@@ -165,7 +165,8 @@ def train(train_data, valid_data, args, result_file):
             my_optim.step()
             loss_total += float(loss)
         print('| end of epoch {:3d} | time: {:5.2f}s | train_total_loss {:5.4f}'.format(epoch, (
-                time.time() - epoch_start_time), loss_total / cnt))
+                time.time() - epoch_start_time), loss_total / cnt)
+                , flush=True)
         save_model(model, result_file, epoch)
         if (epoch+1) % args.exponential_decay_step == 0:
             my_lr_scheduler.step()
