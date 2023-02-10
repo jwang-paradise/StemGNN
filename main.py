@@ -37,6 +37,7 @@ parser.add_argument('--exponential_decay_step', type=int, default=5)
 parser.add_argument('--decay_rate', type=float, default=0.5)
 parser.add_argument('--dropout_rate', type=float, default=0.5)
 parser.add_argument('--leakyrelu_rate', type=int, default=0.2)
+parser.add_argument('--bottom_level_only', type=bool)
 
 
 args = parser.parse_args()
@@ -52,7 +53,40 @@ if not os.path.exists(result_train_file):
     os.makedirs(result_train_file)
 if not os.path.exists(result_test_file):
     os.makedirs(result_test_file)
-data = pd.read_csv(data_file).values
+if args.dataset.startswith('hier-'):
+    from datasetsforecast.hierarchical import HierarchicalData
+    Y_df, S_df, tags = HierarchicalData.load('./data', args.dataset.split('-')[1])
+        # Long format data (T, N); Aggregation matrix; Tags
+    # Y_df['ds'] = pd.to_datetime(Y_df['ds'])
+    Y_wide = Y_df.pivot(index='ds', columns='unique_id', values='y')
+    assert Y_wide.isna().sum().sum() == 0, 'Missing values in the data'
+
+    if args.bottom_level_only: # Get the bottom level
+        print("Using the bottom level data")
+        # cnt_lvl_map = { len(tag): lvl for lvl, tag in tags.items() }
+        # bottom_lvl_names = cnt_lvl_map[max(cnt_lvl_map.keys())]
+        # Y_wide_bottom = Y_wide[tags[bottom_lvl_names]]
+        Y_wide_bottom = Y_wide[S_df.columns]
+        data = Y_wide_bottom.values
+        A = None
+    else:
+        print("Using all levels of data")
+        data = Y_wide.values
+        # Convert aggregation matrix to adjacency matrix
+        n_total, n_bottom = S_df.shape
+        n_agg = n_total - n_bottom
+        # Get the first n_agg rows
+        S_agg = S_df.iloc[:n_agg, :]
+        # Create adjacency matrix
+        A = np.hstack([
+            np.vstack([np.eye(n_agg), -S_agg.values.T]),
+            S_df.values
+        ])
+        # A = A - np.eye(n_total)
+else:
+    data = pd.read_csv(data_file).values  # Wide format: (T, N)
+    A = None
+
 
 # split data
 train_ratio = args.train_length / (args.train_length + args.valid_length + args.test_length)
@@ -67,7 +101,7 @@ if __name__ == '__main__':
     if args.train:
         try:
             before_train = datetime.now().timestamp()
-            _, normalize_statistic = train(train_data, valid_data, args, result_train_file)
+            _, normalize_statistic = train(train_data, valid_data, args, result_train_file, prior_matrix=A)
             after_train = datetime.now().timestamp()
             print(f'Training took {(after_train - before_train) / 60:.2f} minutes')
         except KeyboardInterrupt:

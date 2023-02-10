@@ -100,9 +100,9 @@ def validate(model, dataloader, device, normalize_method, statistic,
                 rmse=score[2], rmse_node=score_by_node[2])
 
 
-def train(train_data, valid_data, args, result_file):
+def train(train_data, valid_data, args, result_file, *, prior_matrix=None):
     node_cnt = train_data.shape[1]
-    model = Model(node_cnt, 2, args.window_size, args.multi_layer, horizon=args.horizon)
+    model = Model(node_cnt, 2, args.window_size, args.multi_layer, horizon=args.horizon, prior_matrix=prior_matrix, device=args.device)
     model.to(args.device)
     if len(train_data) == 0:
         raise Exception('Cannot organize enough training data')

@@ -77,7 +77,8 @@ class StockBlockLayer(nn.Module):
 
 class Model(nn.Module):
     def __init__(self, units, stack_cnt, time_step, multi_layer, horizon=1, dropout_rate=0.5, leaky_rate=0.2,
-                 device='cpu'):
+                 device='cpu',
+                 prior_matrix=None):
         super(Model, self).__init__()
         self.unit = units
         self.stack_cnt = stack_cnt
@@ -101,6 +102,10 @@ class Model(nn.Module):
         )
         self.leakyrelu = nn.LeakyReLU(self.alpha)
         self.dropout = nn.Dropout(p=dropout_rate)
+        if prior_matrix is not None:
+            self.prior_matrix = torch.Tensor(prior_matrix).to(device)
+        else:
+            self.prior_matrix = None
         self.to(device)
 
     def get_laplacian(self, graph, normalize):
@@ -158,7 +163,13 @@ class Model(nn.Module):
         data = data.view(bat, N, -1)
         data = self.leakyrelu(data)
         attention = F.softmax(data, dim=2)
-        attention = self.dropout(attention)
+        attention = self.dropout(attention) # (batch, N, N)
+        if self.prior_matrix is not None:
+            # Add prior matrix and attention matrix
+            blend_coeff = 0.0001 / 4
+            attention = attention * (1 - blend_coeff) + self.prior_matrix * blend_coeff
+            # attention = attention * self.prior_matrix
+            # attention = attention / (torch.sum(attention, dim=2, keepdim=True) + 1e-7)
         return attention
 
     def graph_fft(self, input, eigenvectors):
