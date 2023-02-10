@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import torch.fft
 
 class GLU(nn.Module):
     def __init__(self, input_channel, output_channel):
@@ -98,7 +98,8 @@ class Model(nn.Module):
         nn.init.xavier_uniform_(self.weight_key.data, gain=1.414)
         self.weight_query = nn.Parameter(torch.zeros(size=(self.unit, 1)))
         nn.init.xavier_uniform_(self.weight_query.data, gain=1.414)
-        self.GRU = nn.GRU(self.time_step, self.unit)
+        # self.GRU_sane = nn.GRU(input_size=self.unit, hidden_size=128, num_layers=1, batch_first=True)
+        self.GRU = nn.GRU(self.time_step, self.unit)  # input_size (n_features) = T, hidden_size = N
         self.multi_layer = multi_layer
         self.stock_block = nn.ModuleList()
         self.stock_block.extend(
@@ -147,9 +148,20 @@ class Model(nn.Module):
         return multi_order_laplacian
 
     def latent_correlation_layer(self, x):
-        input, _ = self.GRU(x.permute(2, 0, 1).contiguous())
+        # x.shape == [batch_size, time_step (L), node_num] == [B, T, N]
+        # Input to the GRU is of shape (seq_len, batch, input_size)
+
+        input, _ = self.GRU(x.permute(2, 0, 1).contiguous())  # permute to [N, B, T]
+        # input.shape == [N, B, N]
+        
+        # This is crazy. GRU encodes the sequence along the N axis, i.e. reads in a NODE on each time step (n_feat == T).
+        # Fucking insane.
         input = input.permute(1, 0, 2).contiguous()
-        attention = self.self_graph_attention(input)
+        # input.shape == [B, N, N]
+
+        # self.GRU_sane()
+
+        attention = self.self_graph_attention(input) # [N, N]
         attention = torch.mean(attention, dim=0)
         degree = torch.sum(attention, dim=1)
         # laplacian is sym or not
